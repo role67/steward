@@ -4,7 +4,7 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 
 # ---------- Дейлики ----------
-def daily_kb(home: bool, bike: bool, pullups: bool, is_rest: bool) -> InlineKeyboardMarkup:
+def daily_kb(home: bool, bike: bool, pullups: bool, is_rest: bool, status: str = "pending") -> InlineKeyboardMarkup:
     if is_rest:
         rows = [[InlineKeyboardButton(text="🛌 Воскресенье — отдых", callback_data="noop")]]
         rows.append([
@@ -16,8 +16,8 @@ def daily_kb(home: bool, bike: bool, pullups: bool, is_rest: bool) -> InlineKeyb
     def mark(b: bool) -> str: return "✅" if b else "⬜"
 
     rows = [
-        [InlineKeyboardButton(text=f"{mark(home)} Дом",     callback_data="toggle:home")],
-        [InlineKeyboardButton(text=f"{mark(bike)} Велик",   callback_data="toggle:bike")],
+        [InlineKeyboardButton(text=f"{mark(home)} Дом",       callback_data="toggle:home")],
+        [InlineKeyboardButton(text=f"{mark(bike)} Велик",     callback_data="toggle:bike")],
         [InlineKeyboardButton(text=f"{mark(pullups)} Турник", callback_data="toggle:pullups")],
         [
             InlineKeyboardButton(text="🏁 Закрыть день",   callback_data="daily:done"),
@@ -27,8 +27,34 @@ def daily_kb(home: bool, bike: bool, pullups: bool, is_rest: bool) -> InlineKeyb
             InlineKeyboardButton(text="❌ Пропуск",        callback_data="daily:missed"),
             InlineKeyboardButton(text="🔄 Обновить",       callback_data="daily:refresh"),
         ],
-        [InlineKeyboardButton(text="📊 Меню", callback_data="menu")],
     ]
+    if status != "pending":
+        label_map = {"done": "закрыт", "minimum": "минимум", "missed": "пропуск"}
+        cur = label_map.get(status, status)
+        rows.append([InlineKeyboardButton(
+            text=f"↩ Открыть заново (сейчас: {cur})",
+            callback_data="daily:reopen",
+        )])
+    rows.append([InlineKeyboardButton(text="📊 Меню", callback_data="menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+# ---------- Клавиатура напоминания ----------
+def reminder_kb(key: str, postponable: bool, current_offset: int) -> InlineKeyboardMarkup | None:
+    """Кнопки на самом сообщении-напоминании.
+    +30 / +60 — сдвинуть остаток дня. ↩ Сбросить — если оффсет уже есть.
+    """
+    if not postponable:
+        return None
+    rows = [[
+        InlineKeyboardButton(text="⏰ +30 мин", callback_data=f"postpone:30:{key}"),
+        InlineKeyboardButton(text="⏰ +60 мин", callback_data=f"postpone:60:{key}"),
+    ]]
+    if current_offset > 0:
+        rows.append([InlineKeyboardButton(
+            text=f"↩ Сбросить сдвиг (+{current_offset} мин)",
+            callback_data="postpone:reset",
+        )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

@@ -128,6 +128,7 @@ class Reminder:
     minute: int
     key: str
     text: str
+    postponable: bool = True   # показывать ли inline-кнопки переноса
 
 
 # Базовое расписание (старт дома 18:30–19:00, велик 50 мин в 20:30).
@@ -135,20 +136,29 @@ REMINDERS: list[Reminder] = [
     Reminder(17, 30, "food",        "🍽 Еда + отдых. Не лежать весь вечер."),
     Reminder(18, 20, "prep_home",   "⚙️ Подготовка к домашней тренировке. 10 минут."),
     Reminder(18, 30, "start_home",  "🏠 СТАРТ домашней тренировки. Окно 18:30–19:00."),
-    # «Не залипай» каждые 10 минут во время дома
-    Reminder(18, 45, "tempo_1",     "⏱ Не залипай. Держи темп."),
-    Reminder(18, 55, "tempo_2",     "⏱ Следи за отдыхом. Не зависай в телефоне."),
-    Reminder(19, 5,  "tempo_3",     "⏱ Держи темп. Ты уже на половине."),
-    Reminder(19, 15, "tempo_4",     "⏱ Финал кругов. Дожми."),
+    # «Не залипай» каждые 10 минут во время дома — без кнопок переноса
+    Reminder(18, 45, "tempo_1",     "⏱ Не залипай. Держи темп.",                            postponable=False),
+    Reminder(18, 55, "tempo_2",     "⏱ Следи за отдыхом. Не зависай в телефоне.",           postponable=False),
+    Reminder(19, 5,  "tempo_3",     "⏱ Держи темп. Ты уже на половине.",                    postponable=False),
+    Reminder(19, 15, "tempo_4",     "⏱ Финал кругов. Дожми.",                                postponable=False),
     Reminder(20, 20, "prep_ride",   "🚴 Подготовка к выезду. Бутылка, ключи, шлем."),
     Reminder(20, 30, "start_bike",  "🚴 СТАРТ велосипеда. 50 минут."),
     Reminder(21, 20, "pullups",     "🏋 Турник. Вис + негативы. ~20 мин."),
-    Reminder(21, 40, "finish_bike", "🏁 Финиш. Домой."),
+    Reminder(21, 40, "finish_bike", "🏁 Финиш. Домой.",                                       postponable=False),
     Reminder(22, 0,  "snack",       "💧 Вода. Лёгкий перекус. Без мусорной еды."),
     Reminder(23, 0,  "prep_sleep",  "🌙 Подготовка ко сну."),
     Reminder(23, 20, "shower",      "🚿 Душ."),
     Reminder(23, 30, "sleep",       "😴 СОН. Закрой ноут."),
 ]
 
-# Утреннее напоминание про вес/сон
-MORNING_LOG = Reminder(9, 30, "morning_log", "📊 Доброе утро. Запиши вес и сколько спал.")
+# Утреннее напоминание про вес/сон — без переносов (привязано к утру)
+MORNING_LOG = Reminder(9, 30, "morning_log", "📊 Доброе утро. Запиши вес и сколько спал.", postponable=False)
+
+
+def find_reminder(key: str) -> Reminder | None:
+    for r in REMINDERS:
+        if r.key == key:
+            return r
+    if MORNING_LOG.key == key:
+        return MORNING_LOG
+    return None

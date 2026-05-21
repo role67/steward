@@ -39,17 +39,18 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(build_router())
 
-    # DI через workflow_data
+    scheduler = setup_scheduler(bot, settings.owner_id, db, settings.tz)
+    scheduler.start()
+    log.info("Scheduler started (tz=%s)", settings.tz_name)
+
+    # DI через workflow_data (после создания scheduler — он тоже инжектится в хендлеры)
     deps = dict(
         db=db,
         owner_id=settings.owner_id,
         tz=settings.tz,
         tz_name=settings.tz_name,
+        scheduler=scheduler,
     )
-
-    scheduler = setup_scheduler(bot, settings.owner_id, db, settings.tz)
-    scheduler.start()
-    log.info("Scheduler started (tz=%s)", settings.tz_name)
 
     web_runner = await run_web("0.0.0.0", settings.port, settings.public_url)
 

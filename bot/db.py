@@ -60,6 +60,15 @@ CREATE TABLE IF NOT EXISTS punishments (
 
 CREATE INDEX IF NOT EXISTS idx_punishments_user_date
     ON punishments(user_id, apply_date);
+
+-- Сдвиг расписания на конкретный день (минуты)
+CREATE TABLE IF NOT EXISTS daily_offsets (
+    user_id        BIGINT NOT NULL,
+    log_date       DATE   NOT NULL,
+    offset_minutes INT    NOT NULL DEFAULT 0,
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, log_date)
+);
 """
 
 
@@ -215,6 +224,34 @@ class Database:
             user_id, apply_date, reason,
         )
         return row is not None
+
+    # ---------- OFFSETS ----------
+    async def get_offset(self, user_id: int, d: date) -> int:
+        row = await self.pool.fetchrow(
+            "SELECT offset_minutes FROM daily_offsets WHERE user_id=$1 AND log_date=$2",
+            user_id, d,
+        )
+        return int(row["offset_minutes"]) if row else 0
+
+    async def add_offset(self, user_id: int, d: date, delta: int) -> int:
+        row = await self.pool.fetchrow(
+            """
+            INSERT INTO daily_offsets(user_id, log_date, offset_minutes, updated_at)
+            VALUES($1,$2,$3, NOW())
+            ON CONFLICT (user_id, log_date) DO UPDATE
+              SET offset_minutes = daily_offsets.offset_minutes + EXCLUDED.offset_minutes,
+                  updated_at = NOW()
+            RETURNING offset_minutes
+            """,
+            user_id, d, delta,
+        )
+        return int(row["offset_minutes"])
+
+    async def reset_offset(self, user_id: int, d: date) -> None:
+        await self.pool.execute(
+            "DELETE FROM daily_offsets WHERE user_id=$1 AND log_date=$2",
+            user_id, d,
+        )
 
     # ---------- STATS ----------
     async def stats_summary(self, user_id: int, since: date) -> dict:

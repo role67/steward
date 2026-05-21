@@ -63,8 +63,11 @@ async def _send_today(target, db: Database, owner_id: int, tz):
     text = render_day_plan(today, week, plan, ec, eb)
     kb = daily_kb(
         home=row["home_done"], bike=row["bike_done"], pullups=row["pullups_done"],
-        is_rest=plan.rest,
+        is_rest=plan.rest, status=row["status"],
     )
+    offset = await db.get_offset(owner_id, today)
+    if offset:
+        text += f"\n\n⏰ Сдвиг расписания: <b>+{offset} мин</b>"
     if isinstance(target, CallbackQuery):
         await target.message.edit_text(text, reply_markup=kb)
         await target.answer()
