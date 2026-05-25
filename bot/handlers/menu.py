@@ -21,6 +21,27 @@ from ..texts import ACCESS_DENIED, WELCOME
 router = Router(name="menu")
 
 
+def _norm_text(text: str | None) -> str:
+    if not text:
+        return ""
+    return " ".join(text.casefold().split())
+
+
+def _is_menu_text(text: str | None) -> bool:
+    normalized = _norm_text(text)
+    return normalized in {"меню", "📊 меню", "🗓 меню"}
+
+
+def _is_today_text(text: str | None) -> bool:
+    normalized = _norm_text(text)
+    return normalized in {"сегодня", "📅 сегодня"}
+
+
+def _is_stats_text(text: str | None) -> bool:
+    normalized = _norm_text(text)
+    return normalized in {"статистика", "стата", "stats", "📈 статистика"}
+
+
 def _own(owner_id: int):
     async def guard(message_or_cb) -> bool:
         uid = message_or_cb.from_user.id if message_or_cb.from_user else None
@@ -39,7 +60,7 @@ async def cmd_start(message: Message, db: Database, owner_id: int, tz_name: str)
 
 
 @router.message(Command("menu"))
-@router.message(F.text == "🗓 Меню")
+@router.message(F.text.func(_is_menu_text))
 async def cmd_menu(message: Message, owner_id: int):
     if message.from_user.id != owner_id:
         return
@@ -69,14 +90,17 @@ async def _send_today(target, db: Database, owner_id: int, tz):
     if offset:
         text += f"\n\n⏰ Сдвиг расписания: <b>+{offset} мин</b>"
     if isinstance(target, CallbackQuery):
-        await target.message.edit_text(text, reply_markup=kb)
+        try:
+            await target.message.edit_text(text, reply_markup=kb)
+        except Exception:
+            await target.message.answer(text, reply_markup=kb)
         await target.answer()
     else:
         await target.answer(text, reply_markup=kb)
 
 
 @router.message(Command("today"))
-@router.message(F.text == "📅 Сегодня")
+@router.message(F.text.func(_is_today_text))
 async def cmd_today(message: Message, db: Database, owner_id: int, tz):
     if message.from_user.id != owner_id: return
     await _send_today(message, db, owner_id, tz)
@@ -91,7 +115,7 @@ async def cb_today(cb: CallbackQuery, db: Database, owner_id: int, tz):
 
 # ---------- Статистика ----------
 @router.message(Command("stats"))
-@router.message(F.text == "📈 Статистика")
+@router.message(F.text.func(_is_stats_text))
 async def cmd_stats(message: Message, db: Database, owner_id: int, tz):
     if message.from_user.id != owner_id: return
     await _send_stats(message, db, owner_id, tz)
@@ -128,7 +152,10 @@ async def _send_stats(target, db: Database, owner_id: int, tz):
     )
     kb = back_kb()
     if isinstance(target, CallbackQuery):
-        await target.message.edit_text(text, reply_markup=kb)
+        try:
+            await target.message.edit_text(text, reply_markup=kb)
+        except Exception:
+            await target.message.answer(text, reply_markup=kb)
         await target.answer()
     else:
         await target.answer(text, reply_markup=kb)
