@@ -122,7 +122,11 @@ async def mood_pick(cb: CallbackQuery, state: FSMContext, db: Database, owner_id
 async def fatigue_pick(cb: CallbackQuery, state: FSMContext, db: Database, owner_id: int, tz):
     if cb.from_user.id != owner_id:
         await cb.answer(); return
-    val = int(cb.data.split(":")[1])
+    val_str = cb.data.split(":")[1]
+    if not val_str.isdigit():
+        await cb.answer("Некорректное значение", show_alert=False)
+        return
+    val = int(val_str)
     await db.upsert_morning(owner_id, datetime.now(tz).date(), fatigue=val)
     await state.clear()
     await cb.message.edit_text(f"✅ Записано. Усталость: <b>{val}</b>", reply_markup=back_kb())

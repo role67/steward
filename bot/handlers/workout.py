@@ -1,6 +1,7 @@
 """Inline-управление дневной тренировкой."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from aiogram import Bot, F, Router
@@ -13,6 +14,7 @@ from ..logic import get_today_context, render_day_plan
 from ..scheduler import reschedule_today
 
 router = Router(name="workout")
+log = logging.getLogger(__name__)
 
 
 async def _refresh(cb: CallbackQuery, db: Database, owner_id: int, tz):
@@ -36,8 +38,9 @@ async def _refresh(cb: CallbackQuery, db: Database, owner_id: int, tz):
                   is_rest=plan.rest, status=status)
     try:
         await cb.message.edit_text(text + suffix, reply_markup=kb)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Failed to refresh daily message: %s", e)
+        await cb.message.answer(text + suffix, reply_markup=kb)
 
 
 @router.callback_query(F.data.startswith("toggle:"))
@@ -139,9 +142,9 @@ async def cb_postpone(
     try:
         delta = int(action)
     except ValueError:
-        await cb.answer(); return
+        await cb.answer("Некорректная команда", show_alert=False); return
     if delta not in (30, 60):
-        await cb.answer(); return
+        await cb.answer("Доступно только +30 или +60", show_alert=False); return
 
     new_offset = await db.add_offset(owner_id, today, delta)
     await reschedule_today(scheduler, bot, owner_id, db, tz)

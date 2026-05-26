@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aiohttp import web
 
@@ -21,13 +21,16 @@ def _build_app(public_url: str) -> web.Application:
             {
                 "service": "dayliki-bot",
                 "status": "ok",
-                "now": datetime.utcnow().isoformat() + "Z",
+                "now": datetime.now(timezone.utc).isoformat(),
                 "url": public_url or None,
             }
         )
 
     async def health(_: web.Request) -> web.Response:
-        return web.Response(text="OK")
+        return web.json_response(
+            {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()},
+            headers={"Cache-Control": "no-store"},
+        )
 
     app.router.add_route("HEAD", "/", head_root)
     app.router.add_route("GET",  "/", get_root)
