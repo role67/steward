@@ -1,4 +1,4 @@
-"""Бизнес-логика: какой сегодня день программы, наказания, рендер плана."""
+"""Business logic: schedule position, penalties, and daily plan rendering."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,18 +8,15 @@ from .db import Database
 from .plan import DayPlan, WEEKDAY_NAMES, get_day_plan
 
 
-# -------- Какая сегодня неделя/день --------
 def program_position(start_date: date, today: date) -> tuple[int, int]:
-    """Возвращает (номер_недели 1|2, weekday 0..6) циклично от start_date."""
     days = (today - start_date).days
     if days < 0:
         days = 0
-    week_index = (days // 7) % 2          # 0 или 1
-    weekday = today.weekday()             # 0..6 (Пн..Вс)
+    week_index = (days // 7) % 2
+    weekday = today.weekday()
     return (1 if week_index == 0 else 2), weekday
 
 
-# -------- Расчёт наказаний за пропуски --------
 @dataclass
 class PunishmentDelta:
     extra_circles: int
@@ -28,11 +25,6 @@ class PunishmentDelta:
 
 
 def compute_punishment(prev_statuses: list[str], today_weekday: int) -> PunishmentDelta | None:
-    """
-    prev_statuses: статусы за прошлые дни в порядке от вчера к более давним
-                   ('done'|'minimum'|'missed'|'rest'|'pending').
-    Воскресенье (today_weekday == 6) — без наказаний.
-    """
     if today_weekday == 6:
         return None
     if not prev_statuses:
@@ -42,7 +34,6 @@ def compute_punishment(prev_statuses: list[str], today_weekday: int) -> Punishme
     yesterday = prev_statuses[0]
     day_before = prev_statuses[1] if len(prev_statuses) > 1 else None
 
-    # 2 подряд И сегодня суббота — тяжёлая суббота
     if (
         today_weekday == 5
         and yesterday in missed_states
@@ -50,30 +41,56 @@ def compute_punishment(prev_statuses: list[str], today_weekday: int) -> Punishme
         and yesterday != "rest"
         and day_before != "rest"
     ):
-        return PunishmentDelta(2, 20, "2 пропуска подряд → тяжёлая суббота")
+        return PunishmentDelta(2, 20, "2 пропуска подряд -> тяжелая суббота")
 
-    # Один пропуск вчера
     if yesterday in missed_states and yesterday != "rest":
-        return PunishmentDelta(1, 15, "Вчера пропуск → +1 круг, +15 мин велик")
+        return PunishmentDelta(1, 15, "Вчера пропуск -> +1 круг, +15 мин велик")
 
     return None
 
 
-# -------- Закрытие вчерашнего дня (если не отметил) --------
 async def auto_close_previous_day(db: Database, user_id: int, today: date) -> None:
-    """Если на вчера статус pending — помечаем missed (или rest для ВС)."""
     yesterday = today - timedelta(days=1)
     row = await db.get_daily(user_id, yesterday)
     if not row or row["status"] != "pending":
         return
-    new_status = "rest" if yesterday.weekday() == 6 else "missed"
-    await db.set_daily_status(user_id, yesterday, new_status)
+
+    if yesterday.weekday() == 6:
+        await db.set_daily_status(user_id, yesterday, "rest")
+        return
+
+    home_done = bool(row["home_done"])
+    bike_done = bool(row["bike_done"])
+    pullups_done = bool(row["pullups_done"])
+
+    if home_done and bike_done:
+        await db.set_daily_status(
+            user_id,
+            yesterday,
+            "done",
+            home_done=home_done,
+            bike_done=bike_done,
+            pullups_done=pullups_done,
+        )
+        return
+
+    if home_done or bike_done or pullups_done:
+        await db.set_daily_status(
+            user_id,
+            yesterday,
+            "minimum",
+            home_done=home_done,
+            bike_done=bike_done,
+            pullups_done=pullups_done,
+        )
+        return
+
+    await db.set_daily_status(user_id, yesterday, "missed")
 
 
 async def apply_punishments_for_today(
     db: Database, user_id: int, today: date,
 ) -> PunishmentDelta | None:
-    """Считает наказания на основе истории и сохраняет их (idempotent)."""
     if today.weekday() == 6:
         return None
     prev = await db.recent_statuses(user_id, before=today, days=5)
@@ -87,7 +104,6 @@ async def apply_punishments_for_today(
     return delta
 
 
-# -------- Рендер плана дня --------
 def render_day_plan(today: date, week: int, plan: DayPlan, extra_circles: int = 0, extra_bike: int = 0) -> str:
     name = WEEKDAY_NAMES[today.weekday()]
     head = f"<b>{name} · Неделя {week}</b>\n<i>{plan.title}</i>\n"
@@ -121,7 +137,6 @@ def render_day_plan(today: date, week: int, plan: DayPlan, extra_circles: int = 
 
 
 async def get_today_context(db: Database, user_id: int, today: date):
-    """Возвращает (week, weekday, plan, extra_circles, extra_bike, daily_row)."""
     user = await db.get_user(user_id)
     if not user:
         raise RuntimeError("user not initialized")
